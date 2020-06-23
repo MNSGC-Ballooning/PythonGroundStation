@@ -92,12 +92,12 @@ def initTK():
 
     frame_data = Frame(canvas,bg="white")
     canvas.create_window((10,0), window=frame_data, anchor = 'nw')
-    columns_width = 1200
-    rows_height = 800
+    columns_width = 1100
+    rows_height = 700
 
     frame_canvas.config(width=columns_width + vsb.winfo_width(), height= rows_height)
-    canvas.config(scrollregion=canvas.bbox("all"))
-    canvas.yview_moveto(1)
+    #canvas.config(scrollregion=canvas.bbox("all"))
+    #canvas.yview_moveto(1)
 
     frame_command = Frame(frame_main, bg = "maroon").grid(row=50, column = 1, columnspan = 10, sticky = 'ne')
 
@@ -210,6 +210,9 @@ def retrieveData():
         writeWebFile()
         if(ftpSuccess == True):
             placeFile()
+
+        canvas.config(scrollregion=canvas.bbox("all"))
+        canvas.yview_moveto(1)
 
     root.after(100,retrieveData) # rerun function after this many ms
 
