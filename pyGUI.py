@@ -16,7 +16,7 @@ try:
 except:
     import http.client as httplib
 
-#windll.shcore.SetProcessDpiAwareness(1)
+#windll.shcore.SetProcessDpiAwareness(1) #Line to find display scaling
 
 internetConnection = False
 uniquePayloads = [] # empty list of unique payload identifiers
@@ -24,11 +24,12 @@ payloadFileName = [] # empty list of unique payload file names (tags identifier 
 payloadFile = [] # empty list of unique payload files
 dataLabels = []
 p = 0 # This will increment all packets recorded while the app is running
+failedPostCounter = 0 # counts the number of packets that were unable to be uploaded to a database
 data = [] # all data from the payload
 comPort = ""; #declare comPort so it can be global
 ser = serial.Serial() # Global serial port. Declared later on after port is selected
-APRS_APIkey = ""
-Google_APIkey = ""
+APRS_APIkey = "" # aquire these from API keys file
+Google_APIkey = "" # ""
 
 apiKeyFile = open('apiKeys.txt','r') # opens the external file with API keys for google maps and APRS data scraping
 for x in apiKeyFile:
@@ -63,43 +64,43 @@ def initFiles():
     global today
     global fileDay
     today = datetime.datetime.now() # retrieve the current date and time from the local machine
-    fileDay = "DataDate" + today.strftime("%m-%d-%y") # create a file folder labeled with the date
+    fileDay = "Data_" + today.strftime("%m-%d-%y") # create a file folder labeled with the date
     if os.path.exists(fileDay) == False: # if the folder does not exist with this name, make directory
         os.makedirs(fileDay)
-    fileTime = "DataTime" + today.strftime("%H-%M-%S") + ".csv" # create the file name in the "day folder" that is labeled with the exact time
+    # fileTime = "DataTime" + today.strftime("%H-%M-%S") + ".csv" # create the file name in the "day folder" that is labeled with the exact time
+    fileTime = "allFlightData.csv"
     fileName =  os.path.join(fileDay, fileTime) # merge folder and file
 
 def superposeAPRS():
     global APRSmarker
     global APRSpath
     try:
-        callsign = "kd0awk-" + str(callsignNumber.get())
-        APRSurl = "https://api.aprs.fi/api/get?name=" + callsign + "&what=loc&apikey=" + APRS_APIkey + "&format=json"
-        print(APRSurl)
-        r = requests.get(APRSurl)
+        callsign = "kd0awk-" + str(callsignNumber.get()) # aquire radio callsign from interface
+        APRSurl = "https://api.aprs.fi/api/get?name=" + callsign + "&what=loc&apikey=" + APRS_APIkey + "&format=json" #API url for APRS data
+        r = requests.get(APRSurl) # get request for APRS API
         cont = r.json()
 
-        APRSlatitude = str(cont['entries'][0]['lat'])
-        APRSlongitude = str(cont['entries'][0]['lng'])
-        APRSaltitude = str(int(float(cont['entries'][0]['altitude'])/0.3048))
-        unixTime = int(cont['entries'][0]['time'])
-        APRStime = "Last Packet: " + str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime(unixTime)))
+        APRSlatitude = str(cont['entries'][0]['lat']) # aquire latitude from API
+        APRSlongitude = str(cont['entries'][0]['lng']) # aquire longitude from API
+        APRSaltitude = str(int(float(cont['entries'][0]['altitude'])/0.3048)) # Aquire altitude and convert to feet
+        unixTime = int(cont['entries'][0]['time']) # aquire unix time from API
+        APRStime = "Last Packet: " + str(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime(unixTime))) # convert unix time to presentable time
 
-        APRSmarker = "&markers=color:red%7Clabel:A%7C" + APRSlatitude + "," + APRSlongitude
-        APRSpath = APRSpath + "|" + APRSlatitude + "," + APRSlongitude
+        APRSmarker = "&markers=color:red%7Clabel:A%7C" + APRSlatitude + "," + APRSlongitude # marker for most recent data point
+        APRSpath = APRSpath + "|" + APRSlatitude + "," + APRSlongitude # append most recent point to APRS path
 
     except:
-        APRStime = "Last Query Failed..."
+        APRStime = "Last Query Failed..." # show that last query failed
 
-    APRSdata = Label(frame_APRS, text = APRStime, font=('Helvetica', '12'), bg='maroon', fg='gold')
+    APRSdata = Label(frame_APRS, text = APRStime, font=('Helvetica', '12'), bg='maroon', fg='gold') # Present APRS details on GUI
     APRSdata.grid(row = 2, column = 0, columnspan=3, sticky='nw')
 
-    APRSpositionLabel = Label(frame_APRS, text = "Position: " + APRSlatitude +", " + APRSlongitude + " Altitude (ft): " + APRSaltitude , font=('Helvetica', '12'), bg='maroon', fg='gold')
+    APRSpositionLabel = Label(frame_APRS, text = "Position: " + APRSlatitude +", " + APRSlongitude + " Altitude (ft): " + APRSaltitude , font=('Helvetica', '12'), bg='maroon', fg='gold') # Present APRS details on GUI
     APRSpositionLabel.grid(row=3, column=0, sticky='nw')
 
-    root.after(60000,superposeAPRS)
+    root.after(60000,superposeAPRS) # look for new APRS point after 1 minute
 
-def checkInternet(url="www.google.com", timeout=3):
+def checkInternet(url="www.google.com", timeout=3): # check for internet connection
     global internetConnection
     internetConn = httplib.HTTPConnection(url, timeout=timeout)
     try:
@@ -197,23 +198,24 @@ def connectdb():
         # cnx.commit()
 
     except:
-        print("didn't connect to database");
+        print("failed to connect to database")
 
 def writedb():
     global cnx
     global cursor
     try:
-        # node.get()
-        nodeLabels = ["One", "Two", "Three"]
+        nodeLabels = ["One", "Two", "Three"] # node label list
+        # SQL syntax to append data to current node
         add_sensorData = ("INSERT INTO sensorData" + nodeLabels[node.get()-1] +
                "(payload, gpsDate, gpsTime, latitude, longitude, altitude, sensor1, sensor2, sensor3, sensor4, sensor5, sensor6) "
                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+
 
         sensData = (str(fileList[0]), str(fileList[1]), str(fileList[2]), str(fileList[3]), str(fileList[4]), str(fileList[5]), str(fileList[6]), str(fileList[7]), str(fileList[8]), str(fileList[9]), str(fileList[10]), str(fileList[11]))
         cursor.execute(add_sensorData, sensData)
         cnx.commit()
     except:
-        print("failed to post data")
+        failedPostCounter = failedPostCounter + 1
 
 def mySerial(number):
     currentPort = str(ports[number])
@@ -243,16 +245,15 @@ def updateMaps():
     global GPSpath
     if len(fileList) > 5:
         if fileList[4]!= 0:
-            #Google_APIkey = "AIzaSyA3NXG_zuEHHv3gTRq0qzSIVcCJYOWrIDo"
             url = "https://maps.googleapis.com/maps/api/staticmap?"
-            center = str(fileList[3]) + "," + str(fileList[4])
-            GPSpath = GPSpath + "|" + center
-            marker = "&markers=color:blue%7Clabel:M%7C" + center
-            size = "&size=" + str(mapWidth) + "x" + str(mapHeight)
+            center = str(fileList[3]) + "," + str(fileList[4]) # append GPS coordinates to google api url
+            GPSpath = GPSpath + "|" + center # append last GPS coordinates to payload path on the map
+            marker = "&markers=color:blue%7Clabel:M%7C" + center # mark the most recent payload GPS coordinates on the map
+            size = "&size=" + str(mapWidth) + "x" + str(mapHeight) # specify the static map size
             try:
                 fullURL = url + "center=" + center + "&zoom=" + str(mapZoom) + GPSpath + APRSpath + size + marker + APRSmarker + "&key=" + Google_APIkey
             except:
-                fullURL = url + "center=" + center + "&zoom=" + str(mapZoom) + GPSpath + APRSpath + size + marker + "&key=" + Google_APIkey
+                fullURL = url + "center=" + center + "&zoom=" + str(mapZoom) + GPSpath + APRSpath + size + marker + "&key=" + Google_APIkey # if APRSmarker is undefined, dont use one
             r = requests.get(fullURL)
             f = open("map.png", "wb")
             f.write(r.content)
@@ -293,10 +294,6 @@ def retrieveData():
 
         guiTime = datetime.datetime.now()
 
-        # for z in range(len(fileList)):
-        #     Label(frame_comports, text = headerList[z] + ": " + fileList[z] + "\t", font= ('Helvetica', '16'), bg = "maroon", fg= "white").grid(row=z+portsLength, column=0, sticky='nw')
-        # Label(frame_comports, text = "Receive Time: " + str(guiTime.strftime('%H:%M:%S')), font= ('Helvetica', '16'), bg ="maroon", fg = "gold").grid(row = len(fileList)+portsLength+1, column=0, sticky='sw')
-
         checker = -1;
 
         for y in range(len(uniquePayloads)):
@@ -306,7 +303,7 @@ def retrieveData():
         if checker == -1:
             try:
                 uniquePayloads.append(fileList[0])
-                fileTime = "Time" + today.strftime("%H-%M-%S") + "Payload" + fileList[0] +".csv" # create the file name in the "day folder" that is labeled with the exact time
+                fileTime = "Payload" + fileList[0] +".csv" # create the file name in the "day folder" that is labeled with the exact time
                 payloadFileName.append(os.path.join(fileDay, fileTime)) # merge folder and file
                 payloadFile.append(open(payloadFileName[-1],'w'))
             except:
@@ -329,7 +326,7 @@ def retrieveData():
         dataLabels[len(dataLabels)-1].grid(row=p,column=1) # write every single data string
         p = p + 1
 
-        if(upload.get()==1): # checks to see if data upload checkbox is selected
+        if(upload.get()==1 and len(fileList)<=15): # checks to see if data upload checkbox is selected and the length of the string is less than or equal to 12 variables
             writedb()   # writes to server database if button is selected
 
         canvas.config(scrollregion=canvas.bbox("all"))
